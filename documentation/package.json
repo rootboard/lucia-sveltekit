@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "astro build & npm run docs:generate-index",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "docs:generate-index": "node ./index-docs.js"
   },
   "dependencies": {
     "@astrojs/svelte": "^1.0.0",
@@ -17,5 +18,9 @@
     "rehype-wrap-all": "^1.1.0",
     "svelte": "^3.46.4",
     "tailwindcss": "^3.1.8"
+  },
+  "devDependencies": {
+    "globby": "^13.1.2",
+    "gray-matter": "^4.0.3"
   }
 }
