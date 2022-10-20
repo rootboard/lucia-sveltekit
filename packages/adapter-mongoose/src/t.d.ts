@@ -1,32 +1,28 @@
 /// <reference types="lucia-sveltekit" />
 declare namespace Lucia {
-    interface UserData {}
+    type Auth = any;
+    type UserAttributes = {};
 }
 
 declare namespace App {
-	interface Locals {}
+    interface Locals {}
 }
 
 interface UserDoc {
-	__v: any,
-	_id: string,
+    _id: string;
+    __v?: any;
+    _doc?: any;
+    $__?: any;
     hashed_password: string | null;
     provider_id: string;
     username: string;
-    email: string;
+    user_email: string;
 }
 
 interface SessionDoc {
-	_id: string,
-	__v: any,
-    access_token: string;
+    _id: string;
+    __v?: any;
     expires: number;
     user_id: string;
-}
-
-interface RefreshTokenDoc {
-	_id: string,
-	__v: any,
-    refresh_token: string;
-    user_id: string;
+    idle_expires: number;
 }

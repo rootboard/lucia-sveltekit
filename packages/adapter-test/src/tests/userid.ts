@@ -1,11 +1,11 @@
-import type { Adapter } from "lucia-sveltekit/adapter"
+import type { Adapter } from "lucia-sveltekit/adapter";
 import { test, end, validate } from "./../test.js";
 import { User } from "./../db.js";
 import { Database } from "../index.js";
 
 export const testAdapter = async (adapter: Adapter, db: Database) => {
     const clearAll = async () => {
-        await Promise.all([db.clearSessions(), db.clearRefreshTokens()]);
+        await db.clearSessions();
         await db.clearUsers();
     };
     await clearAll();
@@ -14,16 +14,15 @@ export const testAdapter = async (adapter: Adapter, db: Database) => {
         "Insert a user with a null user id into Users DB",
         async () => {
             const user = new User();
-            const userId = await adapter.setUser(null, {
+            const createdUser = await adapter.setUser(null, {
                 providerId: user.providerId,
                 hashedPassword: user.hashedPassword,
-                userData: {
+                attributes: {
                     username: user.username,
-                    email: user.userEmail,
                 },
             });
             user.update({
-                id: userId,
+                id: createdUser.id,
             });
             const users = await db.getUsers();
             validate.includesSomeItem(

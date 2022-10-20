@@ -1,9 +1,8 @@
 import { invalid, redirect, type Actions } from '@sveltejs/kit';
 import { auth } from '$lib/server/lucia';
-import { setCookie } from 'lucia-sveltekit';
 
 export const actions: Actions = {
-	default: async ({ request, cookies }) => {
+	default: async ({ request, locals }) => {
 		const form = await request.formData();
 		const username = form.get('username');
 		const password = form.get('password');
@@ -14,12 +13,12 @@ export const actions: Actions = {
 		}
 		try {
 			const user = await auth.authenticateUser('username', username, password);
-			const { tokens } = await auth.createSession(user.userId);
-			setCookie(cookies, ...tokens.cookies);
+			const session = await auth.createSession(user.userId);
+			locals.setSession(session)
 		} catch (e) {
 			const error = e as Error;
 			if (
-				error.message === 'AUTH_INVALID_IDENTIFIER_TOKEN' ||
+				error.message === 'AUTH_INVALID_PROVIDER_ID' ||
 				error.message === 'AUTH_INVALID_PASSWORD'
 			) {
 				return invalid(400, {

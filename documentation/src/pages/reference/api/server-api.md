@@ -4,7 +4,7 @@ layout: "@layouts/DocumentLayout.astro"
 title: "Server API"
 ---
 
-These can be imported from `lucia-sveltekit`. Can only be used inside a server context (.server.ts).
+These can be imported from `lucia-sveltekit`. Can only be used inside a server context (.server.ts). The errors list is for Lucia client using official adapters.
 
 ```ts
 import { generateRandomString } from "lucia-sveltekit";
@@ -108,10 +108,7 @@ try {
 Creates a new session of a user.
 
 ```ts
-const createSession: (userId: string) => Promise<{
-    session: Session;
-    tokens: Tokens;
-}>;
+const createSession: (userId: string) => Promise<Session>;
 ```
 
 #### Parameter
@@ -122,17 +119,16 @@ const createSession: (userId: string) => Promise<{
 
 #### Returns
 
-| name    | type                                            | description                           |
-| ------- | ----------------------------------------------- | ------------------------------------- |
-| session | [`Session`](/reference/types/lucia-types#session)                                       | The newly created session             |
-| tokens  | [`Tokens`](/reference/types/lucia-types#tokens) | The tokens and cookies of the session |
+| type                                              | description               |
+| ------------------------------------------------- | ------------------------- |
+| [`Session`](/reference/types/lucia-types#session) | The newly created session |
 
 #### Errors
 
-| name                   | description                              |
-| ---------------------- | ---------------------------------------- |
-| AUTH_INVALID_USER_ID   | The user with the user id does not exist |
-| DATABASE_UPDATE_FAILED | Failed to update database                |
+| name                   | description               |
+| ---------------------- | ------------------------- |
+| AUTH_INVALID_USER_ID   | Invalid user id           |
+| DATABASE_UPDATE_FAILED | Failed to update database |
 
 #### Example
 
@@ -155,19 +151,19 @@ const createUser: (
     identifier: string,
     options?: {
         password?: string;
-        userData?: Lucia.UserData;
+        attributes?: Lucia.UserAttributes;
     }
 ) => Promise<User>;
 ```
 
 #### Parameter
 
-| name             | type             | description                                             | optional |
-| ---------------- | ---------------- | ------------------------------------------------------- | -------- |
-| provider         | `string`         | The provider of the user to create                      |          |
-| identifier       | `string`         | The identifier of the user˝ to create                   |          |
-| options.password | `string`         | The password of the user - can be undefined to omit it. | true     |
-| options.userData | `Lucia.UserData` | Additional user data to store in `user` table           | true     |
+| name               | type                                                                      | description                                             | optional |
+| ------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------- | -------- |
+| provider           | `string`                                                                  | The provider of the user to create                      |          |
+| identifier         | `string`                                                                  | The identifier of the user˝ to create                   |          |
+| options.password   | `string`                                                                  | The password of the user - can be undefined to omit it. | true     |
+| options.attributes | [`Lucia.UserAttributes`](/reference/types/lucia-namespace#userattributes) | Additional user data to store in `user` table           | true     |
 
 #### Returns
 
@@ -191,7 +187,7 @@ import { auth } from "$lib/server/lucia";
 try {
     await auth.createUser("email", "user@example.com", {
         password: "123456",
-        userData: {
+        attributes: {
             username: "user123",
             isAdmin: true,
         },
@@ -201,37 +197,12 @@ try {
 }
 ```
 
-### `deleteAllCookies()`
+### `deleteDeadUserSessions()`
 
-Deletes all cookies created by Lucia.
-
-```ts
-const deleteAllCookies: (cookie: Cookie) => Promise<void>;
-```
-
-#### Parameter
-
-| name   | type   | description               |
-| ------ | ------ | ------------------------- |
-| cookie | Cookie | SvelteKit's cookie module |
-
-#### Example
+Deletes all sessions that are expired and their idle period has passed (dead sessions). Will succeed regardless of the validity of the user id.
 
 ```ts
-import { auth } from "$lib/server/lucia";
-import type { Action } from "@sveltejs/kit";
-
-const action: Action = async ({ cookie }) => {
-    auth.deleteAllCookies(cookie);
-};
-```
-
-### `deleteExpiredUserSessions()`
-
-Removes all expired session of a user from the `session` table. Will succeed regardless of the validity of the user id
-
-```ts
-const deleteExpiredUserSessions: (userId: string) => Promise<void>;
+const deleteDeadUserSessions: (userId: string) => Promise<void>;
 ```
 
 #### Parameter
@@ -290,32 +261,51 @@ try {
 }
 ```
 
-### `getSessionUser()`
+### `generateSessionId()`
 
-Validates the access token, and gets the user of the session.
+Generates a new session id (40 chars long), as well as the expiration time (unix).
 
 ```ts
-const getSessionUser: (accessToken: userId) => Promise<User>;
+const generateSessionId: () => [string, number, number];
+```
+
+#### Returns
+
+| name | type     | description                                             |
+| ---- | -------- | ------------------------------------------------------- |
+| [0]  | `string` | The session id                                          |
+| [1]  | `number` | The session's expiration time                           |
+| [2]  | `number` | The expiration time (unix) of the session's idle period |
+
+### `getSessionUser()`
+
+Validates an active session id, and gets the session and the user in one database call.
+
+```ts
+const getSessionUser: (
+    sessionId: string
+) => Promise<{ user: User; session: Session }>;
 ```
 
 #### Parameter
 
-| name        | type     | description                 |
-| ----------- | -------- | --------------------------- |
-| accessToken | `string` | Access token of the session |
+| name      | type     | description               |
+| --------- | -------- | ------------------------- |
+| sessionId | `string` | A valid active session id |
 
 #### Returns
 
-| type                                        | description                                 |
-| ------------------------------------------- | ------------------------------------------- |
-| [`User`](/reference/types/lucia-types#user) | The user of the session of the access token |
+| name    | type                                              | description                   |
+| ------- | ------------------------------------------------- | ----------------------------- |
+| session | [`Session`](/reference/types/lucia-types#session) | The session of the session id |
+| user    | [`User`](/reference/types/lucia-types#user)       | The user of the session       |
 
 #### Errors
 
-| name                      | description                                      |
-| ------------------------- | ------------------------------------------------ |
-| AUTH_INVALID_ACCESS_TOKEN | The session with the access token does not exist |
-| DATABASE_FETCH_FAILED     | Failed to fetch data from the database           |
+| name                    | description                            |
+| ----------------------- | -------------------------------------- |
+| AUTH_INVALID_SESSION_ID | A valid active session id              |
+| DATABASE_FETCH_FAILED   | Failed to fetch data from the database |
 
 #### Example
 
@@ -323,9 +313,9 @@ const getSessionUser: (accessToken: userId) => Promise<User>;
 import { auth } from "$lib/server/lucia";
 
 try {
-    await auth.getSessionUser(accessToken);
+    await auth.getSessionUser(sessionId);
 } catch {
-    // invalid access token
+    // invalid session id
 }
 ```
 
@@ -413,7 +403,7 @@ try {
 
 ### `handleHooks()`
 
-For the handle function in hooks. Handles requests to Lucia's APIs and creates a new global variable in the browser.
+For the handle function in hooks. Reads the session id from cookies and validates it, attempting to renew it if the session id has expired. This also creates handles requests to Lucia's api endpoints and creates an internal global variable in the client.
 
 ```ts
 const handleHooks: () => Handle;
@@ -442,7 +432,7 @@ export const handle: Handle = sequence(auth.handleHooks(), customHandle);
 
 ### `handleServerSession()`
 
-For the root layout server load function. Reads the cookies and gets the user of the access token. Refreshes the session if the access token has expired. If a server load function is provided, Lucia will run it after it finishes handling tokens. The load function may also return data.
+For the root layout server load function. Reads the sessions passed on from hooks (`handleHooks()`), gets the user, and passes on to child load functions and the client. If a server load function is provided (which can return some data), Lucia will run it after it finishes handling sessions.
 
 ```ts
 const handleServerSession: (serverLoad?: ServerLoad) => ServerLoad;
@@ -507,17 +497,17 @@ try {
 
 ### `invalidateSession()`
 
-Invalidates an access token and the session connected to it. Will succeed regardless of the validity of the access token.
+Invalidates a session. Will succeed regardless of the validity of the session id.
 
 ```ts
-const invalidateSession: (accessToken: string) => Promise<void>;
+const invalidateSession: (sessionId: string) => Promise<void>;
 ```
 
 #### Parameter
 
-| name        | type     | description                 |
-| ----------- | -------- | --------------------------- |
-| accessToken | `string` | Access token of the session |
+| name      | type     | description  |
+| --------- | -------- | ------------ |
+| sessionId | `string` | A session id |
 
 #### Errors
 
@@ -531,7 +521,7 @@ const invalidateSession: (accessToken: string) => Promise<void>;
 import { auth } from "lucia-sveltekit";
 
 try {
-    await auth.invalidateSession(accessToken);
+    await auth.invalidateSession(sessionId);
 } catch {
     // error
 }
@@ -539,13 +529,10 @@ try {
 
 ### `parseRequest()`
 
-Checks if the request is from a trusted origin if `configuration.csrfProtection` is true, and gets the access token and refresh token from the cookie.
+Checks if the request is from a trusted origin if `configuration.csrfProtection` is true, and gets the session id from the cookie. Returns an empty string if none exists. This does **NOT** check the validity of the session id.
 
 ```ts
-const parseRequest: (request: Request) => Promise<{
-    accessToken: string;
-    refreshToken: string;
-}>;
+const parseRequest: (request: Request) => string;
 ```
 
 #### Parameter
@@ -556,10 +543,9 @@ const parseRequest: (request: Request) => Promise<{
 
 #### Returns
 
-| name         | type    | description                                                              |
-| ------------ | ------- | ------------------------------------------------------------------------ |
-| accessToken  | `string | The access token read from the request - an empty string if none exists  |
-| refreshToken | `string | The refresh token read from the request - an empty string if none exists |
+| type     | description                         |
+| -------- | ----------------------------------- |
+| `string` | The session id read from the cookie |
 
 #### Errors
 
@@ -575,44 +561,40 @@ import type { Action } from "@sveltejs/kit";
 
 const action: Action = async ({ request }) => {
     try {
-        const { accessToken } = await auth.parseRequest(request);
+        const sessionId = auth.parseRequest(request);
     } catch {
         // request from untrusted domain
     }
 };
 ```
 
-### `refreshSession()`
+### `renewSession()`
 
-Checks the validity of the refresh token and refreshes the session.
+Takes and validates an active or idle session id, and renews the session. The used session id (and its session) is invalidated.
 
 ```ts
-const refreshSession: (refreshToken: string) => Promise<{
-    session: Session;
-    tokens: Tokens;
-}>;
+const renewSession: (sessionId: string) => Promise<Session>;
 ```
 
 #### Parameter
 
-| name         | type     | description     |
-| ------------ | -------- | --------------- |
-| refreshToken | `string` | A refresh token |
+| name      | type     | description                       |
+| --------- | -------- | --------------------------------- |
+| sessionId | `string` | A valid active or idle session id |
 
 #### Returns
 
-| name    | type                                            | description                           |
-| ------- | ----------------------------------------------- | ------------------------------------- |
-| session | [`Session`](/reference/types/lucia-types#session)                                       | The newly created session             |
-| tokens  | [`Tokens`](/reference/types/lucia-types#tokens) | The tokens and cookies of the session |
+| type                                              | description               |
+| ------------------------------------------------- | ------------------------- |
+| [`Session`](/reference/types/lucia-types#session) | The newly created session |
 
 #### Errors
 
-| name                       | description                            |
-| -------------------------- | -------------------------------------- |
-| AUTH_INVALID_REFRESH_TOKEN | Invalid refresh token                  |
-| DATABASE_UPDATE_FAILED     | Failed to update database              |
-| DATABASE_FETCH_FAILED      | Failed to fetch data from the database |
+| name                    | description                            |
+| ----------------------- | -------------------------------------- |
+| AUTH_INVALID_SESSION_ID | Invalid session id                     |
+| DATABASE_UPDATE_FAILED  | Failed to update database              |
+| DATABASE_FETCH_FAILED   | Failed to fetch data from the database |
 
 #### Example
 
@@ -620,29 +602,29 @@ const refreshSession: (refreshToken: string) => Promise<{
 import { auth } from "lucia-sveltekit";
 
 try {
-    await auth.refreshSession(refreshToken);
+    const session = await auth.renewSession(refreshToken);
 } catch {
     // error
 }
 ```
 
-### `updateUserData()`
+### `updateUserAttributes()`
 
-Updates one of the custom fields in the `user` table. The keys of `userData` should be one of the additional columns `user` table, and the values of it can be `null` but not `undefined`.
+Updates one of the custom fields in the `user` table. The keys of `attributes` should include one or more of the additional columns inside `user` table, and the values can be `null` but not `undefined`.
 
 ```ts
-const updateUserData: (
+const updateUserAttributes: (
     userId: string,
-    userData: Partial<Lucia.UserData>
+    attributes: Partial<Lucia.UserAttributes>
 ) => Promise<User>;
 ```
 
 #### Parameter
 
-| name     | type                              | description                                                             |
-| -------- | --------------------------------- | ----------------------------------------------------------------------- |
-| userId   | `string`                          | A refresh token                                                         |
-| userData | `Partial<`[`Lucia.UserData`]()`>` | Key-value pairs of some or all of the column in `user` table to update. |
+| name       | type                                                                                   | description                                                             |
+| ---------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| userId     | `string`                                                                               | A refresh token                                                         |
+| attributes | `Partial<`[`Lucia.UserAttributes`](/reference/types/lucia-namespace#userattributes)`>` | Key-value pairs of some or all of the column in `user` table to update. |
 
 #### Returns
 
@@ -664,7 +646,7 @@ const updateUserData: (
 import { auth } from "lucia-sveltekit";
 
 try {
-    await auth.updateUserData(userId, {
+    await auth.updateUserAttributes(userId, {
         username: "user123",
     });
 } catch {
@@ -761,32 +743,32 @@ try {
 }
 ```
 
-### `validateAccessToken()`
+### `validateSession()`
 
-Validates an access token.
+Validates an active session id. Idle sessions are considered invalid.
 
 ```ts
-const validateAccessToken: (accessToken: string) => Promise<Session>;
+const validateSession: (sessionId: string) => Promise<Session>;
 ```
 
 #### Parameter
 
-| name        | type     | description     |
-| ----------- | -------- | --------------- |
-| accessToken | `string` | An access token |
+| name      | type     | description               |
+| --------- | -------- | ------------------------- |
+| sessionId | `string` | A valid active session id |
 
 #### Returns
 
-| type      | description                     |
-| --------- | ------------------------------- |
-| [`Session`](/reference/types/lucia-types#session) | The session of the access token |
+| type                                              | description                   |
+| ------------------------------------------------- | ----------------------------- |
+| [`Session`](/reference/types/lucia-types#session) | The session of the session id |
 
 #### Errors
 
-| name                      | description                            |
-| ------------------------- | -------------------------------------- |
-| AUTH_INVALID_ACCESS_TOKEN | The access token is invalid            |
-| DATABASE_FETCH_FAILED     | Failed to fetch data from the database |
+| name                    | description                            |
+| ----------------------- | -------------------------------------- |
+| AUTH_INVALID_SESSION_ID | Invalid active session id              |
+| DATABASE_FETCH_FAILED   | Failed to fetch data from the database |
 
 #### Example
 
@@ -794,57 +776,18 @@ const validateAccessToken: (accessToken: string) => Promise<Session>;
 import { auth } from "lucia-sveltekit";
 
 try {
-    await auth.validateAccessToken(accessToken);
+    await auth.validateSession(sessionId);
 } catch {
     // invalid
 }
-```
-
-### `validateRefreshToken()`
-
-Validates a refresh token. When refreshing the session, the current refresh token should be invalidated before creating a new refresh token.
-
-```ts
-try {
-    const validateRefreshToken: (refreshToken: string) => Promise<string>;
-} catch {
-    // invalid
-}
-```
-
-#### Parameter
-
-| name         | type     | description     |
-| ------------ | -------- | --------------- |
-| refreshToken | `string` | A refresh token |
-
-#### Returns
-
-| type     | description                                  |
-| -------- | -------------------------------------------- |
-| `string` | The user id of the user of the refresh token |
-
-#### Errors
-
-| name                       | description                            |
-| -------------------------- | -------------------------------------- |
-| AUTH_INVALID_REFRESH_TOKEN | The access token is invalid            |
-| DATABASE_FETCH_FAILED      | Failed to fetch data from the database |
-
-#### Example
-
-```ts
-import { auth } from "lucia-sveltekit";
-
-await auth.validateRefreshToken(refreshToken);
 ```
 
 ### `validateRequest()`
 
-Checks if the request is from a trusted domain, and if so, validates the access token. Runs [`parseRequest()`](/reference/api/server-api#parserequest) and [`validateAccessToken()`](/reference/api/server-api#validateaccesstoken).
+Checks if the request is from a trusted domain, and if so, validates the session id stored inside `auth_session` cookie. Runs [`parseRequest()`](/reference/api/server-api#parserequest) and [`validateSession()`](/reference/api/server-api#validatesession).
 
 ```ts
-const parseRequest: (request: Request) => Promise<Session>;
+const validateRequest: (request: Request) => Promise<Session>;
 ```
 
 #### Parameter
@@ -855,18 +798,17 @@ const parseRequest: (request: Request) => Promise<Session>;
 
 #### Returns
 
-| name         | type    | description                                                              |
-| ------------ | ------- | ------------------------------------------------------------------------ |
-| accessToken  | `string | The access token read from the request - an empty string if none exists  |
-| refreshToken | `string | The refresh token read from the request - an empty string if none exists |
+| type                                              | description                   |
+| ------------------------------------------------- | ----------------------------- |
+| [`Session`](/reference/types/lucia-types#session) | The session of the session id |
 
 #### Errors
 
-| name                      | description                              |
-| ------------------------- | ---------------------------------------- |
-| AUTH_INVALID_REQUEST      | The request is not from a trusted origin |
-| AUTH_INVALID_ACCESS_TOKEN | The access token is invalid              |
-| DATABASE_FETCH_FAILED     | Failed to fetch data from the database   |
+| name                    | description                                                        |
+| ----------------------- | ------------------------------------------------------------------ |
+| AUTH_INVALID_REQUEST    | The request is not from a trusted origin                           |
+| AUTH_INVALID_SESSION_ID | The value of `auth_session` cookie is an invalid active session id |
+| DATABASE_FETCH_FAILED   | Failed to fetch data from the database                             |
 
 #### Example
 
@@ -874,9 +816,21 @@ const parseRequest: (request: Request) => Promise<Session>;
 import { auth } from "lucia-sveltekit";
 import type { Action } from "@sveltejs/kit";
 
-const action: Action = async ({ request }) => {
+const action: Action = async ({ request, cookies }) => {
     try {
-        await auth.validateRequest(request);
+        await auth.validateRequestEvent({ request, cookies });
+    } catch {
+        // unauthenticated
+    }
+};
+```
+
+Alternatively, you can just pass the request event:
+
+```ts
+const action: Action = async (event) => {
+    try {
+        await auth.validateRequestEvent(event);
     } catch {
         // unauthenticated
     }
@@ -889,30 +843,4 @@ Refer to [Error reference](/reference/types/errors).
 
 ```ts
 class LuciaError extends Error
-```
-
-## `setCookie()`
-
-A helper function to set cookie strings using SvelteKit's `Cookie`.
-
-```ts
-const setCookie: (cookie: Cookie, ...cookies: string[]) => void;
-```
-
-#### Parameter
-
-| name    | type          | description                |
-| ------- | ------------- | -------------------------- |
-| cookie  | `Cookie`      | SvelteKit's cookie module  |
-| cookies | `...string[]` | An array of cookie strings |
-
-#### Example
-
-```ts
-import { setCookie } from "lucia-sveltekit";
-import type { Action } from "@sveltejs/kit";
-
-const action: Action = async ({ cookie }) => {
-    setCookie(cookie, "cookie1=value;", "cookie2=value; path=/;");
-};
 ```

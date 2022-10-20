@@ -1,9 +1,8 @@
 import { auth } from '$lib/server/lucia';
 import { invalid, redirect, type Actions } from '@sveltejs/kit';
-import { setCookie } from 'lucia-sveltekit';
 
 export const actions: Actions = {
-	default: async ({ request, cookies }) => {
+	default: async ({ request, locals }) => {
 		const form = await request.formData();
 		const username = form.get('username');
 		const password = form.get('password');
@@ -15,20 +14,20 @@ export const actions: Actions = {
 		try {
 			const user = await auth.createUser('username', username, {
 				password,
-				userData: {
+				attributes: {
 					username
 				}
 			});
-			const { tokens } = await auth.createSession(user.userId);
-			setCookie(cookies, ...tokens.cookies);
+			const session = await auth.createSession(user.userId);
+			locals.setSession(session)
 		} catch (e) {
 			const error = e as Error;
 			if (
-				error.message === 'AUTH_DUPLICATE_IDENTIFIER_TOKEN' ||
+				error.message === 'AUTH_DUPLICATE_PROVIDER_ID' ||
 				error.message === 'AUTH_DUPLICATE_USER_DATA'
 			) {
 				return invalid(400, {
-					message: 'Username unavailable'
+					message: 'Username already in use'
 				});
 			}
 			console.error(error);
@@ -36,6 +35,6 @@ export const actions: Actions = {
 				message: 'Unknown error occurred'
 			});
 		}
-		throw redirect(302, '/login');
+		throw redirect(302, '/profile');
 	}
 };

@@ -1,5 +1,5 @@
 ---
-order: 1
+order: 0
 layout: "@layouts/DocumentLayout.astro"
 title: "Mongoose (MongoDB)"
 ---
@@ -44,7 +44,7 @@ const auth = lucia({
 
 ### `user`
 
-You may add additional fields to store custom user data. Refer to [Store additional user data](/learn/basics/store-additional-user-data).
+You may add additional fields to store user attributes. Refer to [[Store user attributes](/learn/basics/store-user-attributes)
 
 ```ts
 const User = mongoose.model(
@@ -71,39 +71,25 @@ const User = mongoose.model(
 ```ts
 const Session = mongoose.model(
     "session",
-    new mongoose.Schema({
-        access_token: {
-            type: String,
-            unique: true,
-            required: true,
+    new mongoose.Schema(
+        {
+            _id: {
+                type: String,
+            },
+            user_id: {
+                type: String,
+                required: true,
+            },
+            expires: {
+                type: Number,
+                required: true,
+            },
+            idle_expires: {
+                type: Number,
+                required: true,
+            },
         },
-        user_id: {
-            type: String,
-            required: true,
-        },
-        expires: {
-            type: Number,
-            required: true,
-        },
-    })
-);
-```
-
-### `refresh_token`
-
-```ts
-const RefreshToken = mongoose.model(
-    "refresh_token",
-    new mongoose.Schema({
-        refresh_token: {
-            unique: true,
-            required: true,
-            type: String,
-        },
-        user_id: {
-            required: true,
-            type: String,
-        },
-    })
+        { _id: false }
+    )
 );
 ```

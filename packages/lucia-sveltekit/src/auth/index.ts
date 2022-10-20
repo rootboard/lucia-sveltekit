@@ -1,5 +1,5 @@
 import type { Handle } from "../kit.js";
-import type { Env } from "../types.js";
+import type { Env, User } from "../types.js";
 import { handleHooksFunction } from "./hooks.js";
 import {
     authenticateUserFunction,
@@ -7,31 +7,27 @@ import {
     deleteUserFunction,
     getUserFunction,
     getUserByProviderIdFunction,
-    updateUserDataFunction,
+    updateUserAttributesFunction,
     updateUserPasswordFunction,
     updateUserProviderIdFunction,
     getSessionUserFunction,
 } from "./user/index.js";
 import { parseRequestFunction, validateRequestFunction } from "./request.js";
 import {
-    invalidateRefreshTokenFunction,
-    validateAccessTokenFunction,
-    validateRefreshTokenFunction,
-} from "./token/index.js";
-import {
     createSessionFunction,
+    deleteDeadUserSessionsFunction,
+    renewSessionFunction,
     invalidateAllUserSessionsFunction,
-    deleteExpiredUserSessionsFunction,
+    validateSessionFunction,
     invalidateSessionFunction,
-    refreshSessionFunction
+    generateSessionIdFunction,
 } from "./session.js";
 import { handleServerSessionFunction } from "./load.js";
-import { deleteAllCookiesFunction } from "./cookie.js";
 import clc from "cli-color";
-import { Adapter } from "../adapter/index.js";
+import { Adapter, UserData, UserSchema } from "../adapter/index.js";
 
-export const lucia = (configs: Configurations) => {
-    return new Auth(configs) as Omit<Auth, "getAuthSession">;
+export const lucia = <C extends Configurations>(configs: C) => {
+    return new Auth(configs) as Omit<Auth<C>, "getAuthSession">;
 };
 
 const validateConfigurations = (configs: Configurations) => {
@@ -46,9 +42,9 @@ const validateConfigurations = (configs: Configurations) => {
     }
 };
 
-export class Auth {
-    private context: Context;
-    constructor(configs: Configurations) {
+export class Auth<C extends Configurations = any> {
+    public context: Context<C>;
+    constructor(configs: C) {
         validateConfigurations(configs);
         this.context = {
             auth: this,
@@ -57,68 +53,84 @@ export class Auth {
                 configs.generateCustomUserId || (async () => null),
             env: configs.env,
             csrfProtection: configs.csrfProtection || true,
+            sessionTimeout: configs.sessionTimeout || 1000 * 60 * 60 * 24,
+            idlePeriodTimeout:
+                configs.idlePeriodTimeout || 1000 * 60 * 60 * 24 * 14,
+            transformUserData: ({
+                id,
+                hashed_password,
+                provider_id,
+                ...attributes
+            }) => {
+                const transform =
+                    configs.transformUserData ||
+                    (({ id }) => {
+                        return {
+                            userId: id,
+                        };
+                    });
+                return transform({ id, ...attributes }) as User;
+            },
         };
         this.getUser = getUserFunction(this.context);
         this.getUserByProviderId = getUserByProviderIdFunction(this.context);
         this.getSessionUser = getSessionUserFunction(this.context);
         this.createUser = createUserFunction(this.context);
-        this.authenticateUser = authenticateUserFunction(this.context);
-        this.deleteUser = deleteUserFunction(this.context);
-        this.updateUserData = updateUserDataFunction(this.context);
+        this.updateUserAttributes = updateUserAttributesFunction(this.context);
         this.updateUserProviderId = updateUserProviderIdFunction(this.context);
         this.updateUserPassword = updateUserPasswordFunction(this.context);
-        this.parseRequest = parseRequestFunction(this.context);
-        this.validateRequest = validateRequestFunction(this.context);
-        this.refreshSession = refreshSessionFunction(this.context);
+        this.deleteUser = deleteUserFunction(this.context);
+        this.authenticateUser = authenticateUserFunction(this.context);
+
+        this.validateSession = validateSessionFunction(this.context);
+        this.generateSessionId = generateSessionIdFunction(this.context);
         this.createSession = createSessionFunction(this.context);
+        this.renewSession = renewSessionFunction(this.context);
         this.invalidateSession = invalidateSessionFunction(this.context);
         this.invalidateAllUserSessions = invalidateAllUserSessionsFunction(
             this.context
         );
-        this.deleteExpiredUserSessions = deleteExpiredUserSessionsFunction(
+        this.deleteDeadUserSessions = deleteDeadUserSessionsFunction(
             this.context
         );
-        this.validateAccessToken = validateAccessTokenFunction(this.context);
-        this.validateRefreshToken = validateRefreshTokenFunction(this.context);
-        this.invalidateRefreshToken = invalidateRefreshTokenFunction(
-            this.context
-        );
+
+        this.parseRequest = parseRequestFunction(this.context);
+        this.validateRequest = validateRequestFunction(this.context);
+
         this.handleHooks = handleHooksFunction(this.context);
         this.handleServerSession = handleServerSessionFunction(this.context);
-        this.deleteAllCookies = deleteAllCookiesFunction(this.context);
     }
-    public handleHooks: () => Handle;
-    public authenticateUser: ReturnType<typeof authenticateUserFunction>;
-    public createUser: ReturnType<typeof createUserFunction>;
     public getUser: ReturnType<typeof getUserFunction>;
     public getUserByProviderId: ReturnType<typeof getUserByProviderIdFunction>;
     public getSessionUser: ReturnType<typeof getSessionUserFunction>;
-    public deleteUser: ReturnType<typeof deleteUserFunction>;
-    public parseRequest: ReturnType<typeof parseRequestFunction>;
-    public validateRequest: ReturnType<typeof validateRequestFunction>;
-    public refreshSession: ReturnType<typeof refreshSessionFunction>;
-    public invalidateRefreshToken: ReturnType<
-        typeof invalidateRefreshTokenFunction
+    public createUser: ReturnType<typeof createUserFunction>;
+    public updateUserAttributes: ReturnType<
+        typeof updateUserAttributesFunction
     >;
-    public createSession: ReturnType<typeof createSessionFunction>;
-    public deleteExpiredUserSessions: ReturnType<
-        typeof deleteExpiredUserSessionsFunction
-    >;
-    public validateAccessToken: ReturnType<typeof validateAccessTokenFunction>;
-    public validateRefreshToken: ReturnType<
-        typeof validateRefreshTokenFunction
-    >;
-    public updateUserData: ReturnType<typeof updateUserDataFunction>;
     public updateUserProviderId: ReturnType<
         typeof updateUserProviderIdFunction
     >;
     public updateUserPassword: ReturnType<typeof updateUserPasswordFunction>;
-    public handleServerSession: ReturnType<typeof handleServerSessionFunction>;
+    public deleteUser: ReturnType<typeof deleteUserFunction>;
+    public authenticateUser: ReturnType<typeof authenticateUserFunction>;
+
+    public validateSession: ReturnType<typeof validateSessionFunction>;
+    public generateSessionId: ReturnType<typeof generateSessionIdFunction>;
+    public createSession: ReturnType<typeof createSessionFunction>;
+    public renewSession: ReturnType<typeof renewSessionFunction>;
     public invalidateSession: ReturnType<typeof invalidateSessionFunction>;
     public invalidateAllUserSessions: ReturnType<
         typeof invalidateAllUserSessionsFunction
     >;
-    public deleteAllCookies: ReturnType<typeof deleteAllCookiesFunction>;
+    public deleteDeadUserSessions: ReturnType<
+        typeof deleteDeadUserSessionsFunction
+    >;
+
+    public parseRequest: ReturnType<typeof parseRequestFunction>;
+    public validateRequest: ReturnType<typeof validateRequestFunction>;
+
+    public handleHooks: () => Handle;
+    public handleServerSession: ReturnType<typeof handleServerSessionFunction>;
 }
 
 interface Configurations {
@@ -126,8 +138,22 @@ interface Configurations {
     env: Env;
     generateCustomUserId?: () => Promise<string | null>;
     csrfProtection?: boolean;
+    sessionTimeout?: number;
+    idlePeriodTimeout?: number;
+    transformUserData?: (userData: UserData) => Record<string, any>;
 }
 
-export type Context = {
-    auth: Auth;
-} & Required<Configurations>;
+export type Context<C extends Configurations = any> = {
+    auth: Auth<C>;
+    adapter: Adapter;
+    env: Env;
+    generateCustomUserId: () => Promise<string | null>;
+    csrfProtection: boolean;
+    sessionTimeout: number;
+    idlePeriodTimeout: number;
+    transformUserData: (
+        userData: UserSchema
+    ) => C["transformUserData"] extends {}
+        ? ReturnType<C["transformUserData"]>
+        : { userId: string };
+};

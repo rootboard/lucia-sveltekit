@@ -38,35 +38,35 @@ type Session = {
 | userId  | `string` | User id of the user of the session  |
 | expires | `number` | Unix time of the session expiration |
 
-## `Tokens`
+## `User`
+
+Return type of [`transformUserData()`](/reference/configure/lucia-configurations#transformuserdata) config.
 
 ```ts
-type Tokens = {
-    accessToken: [string, string];
-    refreshToken: [string, string];
-    cookies: string[];
-};
+type User = ReturnType<typeof transformUserData>;
 ```
 
-| name            | type       | description                                                |
-| --------------- | ---------- | ---------------------------------------------------------- |
-| accessToken[0]  | `string`   | The access token                                           |
-| accessToken[1]  | `string`   | The cookie string of the access token                      |
-| refreshToken[0] | `string`   | The refresh token                                          |
-| refreshToken[1] | `string`   | The cookie string of the refresh token                     |
-| cookies         | `string[]` | An array of all the cookie strings (access, refresh token) |
+### Default
 
-## `User`
+If `transformUserData()` is undefined.
 
 ```ts
 type User = {
     userId: string;
-    providerId: string;
-} & Lucia.UserData;
+};
 ```
 
-| name       | type                                                           | description                                      |
-| ---------- | -------------------------------------------------------------- | ------------------------------------------------ |
-| userId     | `string`                                                       | The user id of the user                          |
-| providerId | `string`                                                       | The provider id: `${providerName}:${identifier}` |
-|            | [`Lucia.UserData`](/reference/types/type-declaration#userdata) |                                                  |
+## `UserData`
+
+The columns of `user` table excluding `hashed_password` and `provider_id`.
+
+```ts
+type UserData = {
+    id: string;
+} & Required<Lucia.UserAttributes>;
+```
+
+| name | type                                                                      | description                        |
+| ---- | ------------------------------------------------------------------------- | ---------------------------------- |
+| id   | `string`                                                                  | User id of the user                |
+|      | [`Lucia.UserAttributes`](/reference/types/lucia-namespace#userattributes) | Additional columns in `user` table |

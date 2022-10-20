@@ -1,15 +1,11 @@
-import { type PrismaClient } from "@prisma/client";
-import pkg from "@prisma/client/runtime/index.js";
-import {
-    type Adapter,
-    getUpdateData
-} from "lucia-sveltekit/adapter";
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { type Adapter, getUpdateData } from "lucia-sveltekit/adapter";
 import { LuciaError } from "lucia-sveltekit";
-import { convertSessionRow, convertUserRow } from "./utils.js";
+import { convertSession } from "./utils.js";
 
 const adapter = (prisma: PrismaClient): Adapter => {
     return {
-        getUserById: async (userId) => {
+        getUser: async (userId) => {
             try {
                 const data = await prisma.user.findUnique({
                     where: {
@@ -17,29 +13,33 @@ const adapter = (prisma: PrismaClient): Adapter => {
                     },
                 });
                 if (!data) return null;
-                return convertUserRow(data);
+                return data;
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_FETCH_FAILED");
             }
         },
-        getUserIdByRefreshToken: async (refreshToken) => {
+        getSessionAndUserBySessionId: async (sessionId) => {
             try {
-                const data = await prisma.refreshToken.findUnique({
+                const data = await prisma.session.findUnique({
                     where: {
-                        refresh_token: refreshToken,
+                        id: sessionId,
                     },
                     include: {
                         user: true,
                     },
                 });
                 if (!data) return null;
-                return data.user.id;
+                const { user, ...session } = data;
+                return {
+                    user: user,
+                    session: convertSession(session),
+                };
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_FETCH_FAILED");
             }
@@ -52,45 +52,26 @@ const adapter = (prisma: PrismaClient): Adapter => {
                     },
                 });
                 if (!data) return null;
-                return convertUserRow(data);
+                return data;
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_FETCH_FAILED");
             }
         },
-        getUserByAccessToken: async (accessToken) => {
+        getSession: async (sessionId) => {
             try {
                 const session = await prisma.session.findUnique({
                     where: {
-                        access_token: accessToken,
-                    },
-                    include: {
-                        user: true,
+                        id: sessionId,
                     },
                 });
                 if (!session) return null;
-                return convertUserRow(session.user);
+                return convertSession(session);
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
-                    throw new LuciaError("UNKNOWN_ERROR");
-                throw new LuciaError("DATABASE_FETCH_FAILED");
-            }
-        },
-        getSessionByAccessToken: async (accessToken) => {
-            try {
-                const session = await prisma.session.findUnique({
-                    where: {
-                        access_token: accessToken,
-                    },
-                });
-                if (!session) return null;
-                return convertSessionRow(session);
-            } catch (e) {
-                console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_FETCH_FAILED");
             }
@@ -102,10 +83,10 @@ const adapter = (prisma: PrismaClient): Adapter => {
                         user_id: userId,
                     },
                 });
-                return sessions.map((val) => convertSessionRow(val));
+                return sessions.map((session) => convertSession(session));
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_FETCH_FAILED");
             }
@@ -117,23 +98,23 @@ const adapter = (prisma: PrismaClient): Adapter => {
                         data: {
                             provider_id: data.providerId,
                             hashed_password: data.hashedPassword,
-                            ...data.userData,
+                            ...data.attributes,
                         } as any,
                     });
-                    return createdUser.id;
+                    return createdUser;
                 }
-                await prisma.user.create({
+                const createdUser = await prisma.user.create({
                     data: {
                         id: userId,
                         provider_id: data.providerId,
                         hashed_password: data.hashedPassword,
-                        ...data.userData,
+                        ...data.attributes,
                     } as any,
                 });
-                return userId;
+                return createdUser;
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 if (e.code === "P2002" && e.message.includes("provider_id")) {
                     throw new LuciaError("AUTH_DUPLICATE_PROVIDER_ID");
@@ -154,44 +135,45 @@ const adapter = (prisma: PrismaClient): Adapter => {
                 return;
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("DATABASE_UPDATE_FAILED");
             }
         },
-        setSession: async (userId, accessToken, expires) => {
+        setSession: async (sessionId, data) => {
             try {
                 await prisma.session.create({
                     data: {
-                        user_id: userId,
-                        access_token: accessToken,
-                        expires,
+                        id: sessionId,
+                        user_id: data.userId,
+                        expires: data.expires,
+                        idle_expires: data.idlePeriodExpires,
                     },
                 });
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 if (
                     e.code === "P2003" &&
                     e.message.includes("session_user_id_fkey (index)")
                 )
                     throw new LuciaError("AUTH_INVALID_USER_ID");
-                if (e.code === "P2002" && e.message.includes("access_token"))
-                    throw new LuciaError("AUTH_DUPLICATE_ACCESS_TOKEN");
+                if (e.code === "P2002" && e.message.includes("id"))
+                    throw new LuciaError("AUTH_DUPLICATE_SESSION_ID");
                 throw new LuciaError("UNKNOWN_ERROR");
             }
         },
-        deleteSessionByAccessToken: async (accessToken) => {
+        deleteSession: async (sessionId) => {
             try {
                 await prisma.session.delete({
                     where: {
-                        access_token: accessToken,
+                        id: sessionId,
                     },
                 });
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("UNKNOWN_ERROR");
             }
@@ -205,55 +187,9 @@ const adapter = (prisma: PrismaClient): Adapter => {
                 });
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 throw new LuciaError("UNKNOWN_ERROR");
-            }
-        },
-        setRefreshToken: async (refreshToken, userId) => {
-            try {
-                await prisma.refreshToken.create({
-                    data: {
-                        refresh_token: refreshToken,
-                        user_id: userId,
-                    },
-                });
-                return;
-            } catch (e) {
-                console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
-                    throw new LuciaError("UNKNOWN_ERROR");
-                throw new LuciaError("DATABASE_UPDATE_FAILED");
-            }
-        },
-        deleteRefreshToken: async (refreshToken) => {
-            try {
-                await prisma.refreshToken.deleteMany({
-                    where: {
-                        refresh_token: refreshToken,
-                    },
-                });
-                return;
-            } catch (e) {
-                console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
-                    throw new LuciaError("UNKNOWN_ERROR");
-                throw new LuciaError("DATABASE_UPDATE_FAILED");
-            }
-        },
-        deleteRefreshTokensByUserId: async (userId) => {
-            try {
-                await prisma.refreshToken.deleteMany({
-                    where: {
-                        user_id: userId,
-                    },
-                });
-                return;
-            } catch (e) {
-                console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
-                    throw new LuciaError("UNKNOWN_ERROR");
-                throw new LuciaError("DATABASE_UPDATE_FAILED");
             }
         },
         updateUser: async (userId, newData) => {
@@ -265,10 +201,10 @@ const adapter = (prisma: PrismaClient): Adapter => {
                         id: userId,
                     },
                 });
-                return convertUserRow(data);
+                return data;
             } catch (e) {
                 console.error(e);
-                if (!(e instanceof pkg.PrismaClientKnownRequestError))
+                if (!(e instanceof Prisma.PrismaClientKnownRequestError))
                     throw new LuciaError("UNKNOWN_ERROR");
                 if (e.code === "P2025")
                     throw new LuciaError("AUTH_INVALID_USER_ID");

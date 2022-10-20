@@ -1,4 +1,3 @@
-import { auth } from "$lib/server/lucia"
+import { auth } from '$lib/server/lucia';
 
-
-export const handle = auth.handleHooks()
+export const handle = auth.handleHooks();
